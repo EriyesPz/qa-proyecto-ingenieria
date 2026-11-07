@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
-import { isAppRole } from "@/lib/auth/roles";
+import { isAppRole, resolveAppRole } from "@/lib/auth/roles";
 import { canAccessRoute } from "@/lib/auth/permissions";
 
 export default async function proxy(request: NextRequest) {
@@ -58,17 +58,20 @@ export default async function proxy(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("perfiles")
-      .select("rol, activo, especialidad_id, especialidades:especialidad_id(nombre)")
+      .select("activo, especialidad_id, especialidades:especialidad_id(nombre), roles:rol_id(nombre, es_superadmin)")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!profile || !profile.activo || !isAppRole(profile.rol)) {
+    const roleData = (profile as any)?.roles;
+    const userRole = resolveAppRole(roleData || (profile as any)?.rol);
+
+    if (!profile || !profile.activo || !isAppRole(userRole)) {
       return NextResponse.redirect(new URL("/auth/sin-acceso", request.url));
     }
 
     const specialtyName = (profile.especialidades as any)?.nombre || null;
 
-    if (!canAccessRoute(profile.rol, pathname, specialtyName)) {
+    if (!canAccessRoute(userRole, pathname, specialtyName)) {
       return NextResponse.redirect(
         new URL("/administracion/no-autorizado", request.url)
       );

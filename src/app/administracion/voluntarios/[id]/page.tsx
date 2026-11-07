@@ -1,5 +1,6 @@
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import { resolveAppRole } from "@/lib/auth/roles";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -17,7 +18,7 @@ export default async function VoluntarioDetallePage({ params }: { params: Promis
   // Fetch voluntario
   const { data: voluntario, error: volError } = await supabase
     .from("perfiles")
-    .select("*, especialidades:especialidad_id(id, nombre)")
+    .select("*, especialidades:especialidad_id(id, nombre), roles:rol_id(nombre, es_superadmin)")
     .eq("id", id)
     .single();
 
@@ -91,6 +92,7 @@ export default async function VoluntarioDetallePage({ params }: { params: Promis
 
       <VoluntarioProfile voluntario={{
         ...voluntario,
+        rol: resolveAppRole((voluntario as any).roles || (voluntario as any).rol),
         participaciones_voluntarios: participaciones || []
       }} />
 

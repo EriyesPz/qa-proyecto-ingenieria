@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { isAppRole, type AppRole } from "./roles";
+import { resolveAppRole, type AppRole } from "./roles";
 import { canAccessRoute, hasPermission, hasAnyPermission, type Permission } from "./permissions";
 
 export type Perfil = {
@@ -35,7 +35,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 
   const { data: profileData, error } = await supabase
     .from("perfiles")
-    .select("*")
+    .select("*, roles:rol_id(nombre, es_superadmin)")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -54,12 +54,11 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       .insert({
         id: user.id,
         nombre_completo: user.user_metadata?.full_name || user.email?.split("@")[0] || "Usuario",
-        rol: null,
         activo: true,
         created_at: now,
         updated_at: now,
       })
-      .select("*")
+      .select("*, roles:rol_id(nombre, es_superadmin)")
       .single();
 
     if (insertError) {
@@ -74,12 +73,14 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     return null;
   }
 
-  if (!isAppRole(profile.rol)) {
-    console.error("Invalid role in profile:", profile.rol);
-    return null;
-  }
+  const roleData = (profile as any)?.roles;
+  const derivedRole = resolveAppRole(roleData || (profile as any)?.rol);
 
-  return { user, role: profile.rol, profile: profile as unknown as (Omit<Perfil, "rol"> & { rol: AppRole }) };
+  return {
+    user,
+    role: derivedRole,
+    profile: { ...profile, rol: derivedRole } as unknown as Omit<Perfil, "rol"> & { rol: AppRole },
+  };
 }
 
 export async function getCurrentUserRole(): Promise<AppRole | null> {

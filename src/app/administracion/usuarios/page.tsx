@@ -1,7 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { requirePermission, getAuthContext } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/auth/permissions";
-import { isAppRole, type AppRole } from "@/lib/auth/roles";
+import { resolveAppRole, type AppRole } from "@/lib/auth/roles";
 import styles from "@/styles/pages/admin.module.css";
 import UsuariosAdminClient from "./UsuariosAdminClient";
 
@@ -42,7 +42,7 @@ export default async function UsuariosPage() {
   // 1. Fetch profiles joined with specialties
   const { data: profilesData, error: profilesError } = await supabase
     .from("perfiles")
-    .select("*, especialidades:especialidad_id(id, nombre)")
+    .select("*, especialidades:especialidad_id(id, nombre), roles:rol_id(nombre, es_superadmin)")
     .order("created_at", { ascending: false });
 
   // 2. Fetch specialties list for filters and modal assignment
@@ -52,7 +52,10 @@ export default async function UsuariosPage() {
     .order("nombre", { ascending: true });
 
   const rawRows = profilesData ?? [];
-  const rows: any[] = rawRows;
+  const rows: any[] = rawRows.map((p: any) => ({
+    ...p,
+    rol: resolveAppRole(p.roles || p.rol),
+  }));
 
   const specialties: SpecialtyRow[] = specialtiesData ?? [];
   const fetchError =

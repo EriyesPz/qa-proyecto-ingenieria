@@ -98,7 +98,6 @@ export async function signUpAction(
       await supabase.from("perfiles").insert({
         id: user.id,
         nombre_completo: fullName,
-        rol: null, // Asignación inicial como nula / pendiente
         activo: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

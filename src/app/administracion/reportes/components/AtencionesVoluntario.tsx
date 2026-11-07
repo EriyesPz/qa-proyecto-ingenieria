@@ -91,7 +91,7 @@ export default function AtencionesVoluntario() {
         interface PerfilRow {
           id: string;
           nombre_completo: string | null;
-          rol: string | null;
+          roles: { nombre: string | null; es_superadmin: boolean | null } | null;
           especialidades: { nombre: string } | null;
           participaciones_voluntarios: Participation[] | null;
         }
@@ -101,8 +101,10 @@ export default function AtencionesVoluntario() {
           .select(`
             id,
             nombre_completo,
-            rol,
-            especialidades (
+            roles:rol_id (
+              nombre,
+              es_superadmin
+            ),
               nombre
             ),
             participaciones_voluntarios!perfil_id (

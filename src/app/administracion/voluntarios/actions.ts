@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { assertPermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import { resolveAppRole } from "@/lib/auth/roles";
 
 // -----------------------------------------------------------------------------
 // Tipos
@@ -113,21 +114,21 @@ export async function obtenerVoluntarios() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("perfiles")
-    .select("*, especialidades:especialidad_id(id, nombre), asignaciones_voluntarios!asignaciones_voluntarios_perfil_id_fkey(id, brigada_id), participaciones_voluntarios!participaciones_voluntarios_perfil_id_fkey(id, brigada_id)")
+    .select("*, especialidades:especialidad_id(id, nombre), roles:rol_id(nombre, es_superadmin), asignaciones_voluntarios!asignaciones_voluntarios_perfil_id_fkey(id, brigada_id), participaciones_voluntarios!participaciones_voluntarios_perfil_id_fkey(id, brigada_id)")
     .order("nombre_completo", { ascending: true });
 
   if (error) {
     console.error("Error fetching volunteers:", error);
     return [];
   }
-  return data || [];
+  return (data || []).map((p: any) => ({ ...p, rol: resolveAppRole(p.roles || p.rol) }));
 }
 
 export async function obtenerVoluntario(id: string) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("perfiles")
-    .select("*, especialidades:especialidad_id(id, nombre)")
+    .select("*, especialidades:especialidad_id(id, nombre), roles:rol_id(nombre, es_superadmin)")
     .eq("id", id)
     .single();
 
@@ -135,7 +136,7 @@ export async function obtenerVoluntario(id: string) {
     console.error("Error fetching volunteer:", error);
     return null;
   }
-  return data;
+  return { ...(data as any), rol: resolveAppRole((data as any).roles || (data as any).rol) };
 }
 
 // -----------------------------------------------------------------------------

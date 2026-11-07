@@ -1,5 +1,6 @@
 import { requireRouteAccess } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { resolveAppRole } from "@/lib/auth/roles";
 import styles from "@/styles/pages/admin.module.css";
 import BrigadasAdminClient from "./BrigadasAdminClient";
 
@@ -22,7 +23,7 @@ export default async function BrigadasPage() {
     supabase.from("gastos_brigada").select("*").order("fecha_gasto", { ascending: false }),
     supabase.from("inscripciones_voluntarios").select("*").order("created_at", { ascending: false }),
     supabase.from("asignaciones_voluntarios").select("*"),
-    supabase.from("perfiles").select("*, especialidades:especialidad_id(id, nombre)").order("nombre_completo", { ascending: true }),
+    supabase.from("perfiles").select("*, especialidades:especialidad_id(id, nombre), roles:rol_id(nombre, es_superadmin)").order("nombre_completo", { ascending: true }),
     supabase.from("brigada_imagenes").select("*").order("orden", { ascending: true }),
   ]);
 
@@ -46,7 +47,7 @@ export default async function BrigadasPage() {
         initialExpenses={(expenses as any) ?? []}
         initialRegistrations={(registrations as any) ?? []}
         initialAssignments={(assignments as any) ?? []}
-        initialProfiles={(profiles as any) ?? []}
+        initialProfiles={((profiles as any[]) ?? []).map((p) => ({ ...p, rol: resolveAppRole(p.roles || p.rol) })) as any}
         initialImages={(images as any) ?? []}
         fetchError={bError?.message ?? null}
       />

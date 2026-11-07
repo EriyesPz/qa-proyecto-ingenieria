@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { assertPermission, getAuthContext } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import { resolveAppRole } from "@/lib/auth/roles";
 
 export type ActionResponse = {
   success?: boolean;
@@ -113,12 +114,24 @@ export async function changeRoleAction(
     await assertPermission(PERMISSIONS.USUARIOS_UPDATE);
 
     const supabase = await createSupabaseServerClient();
+
+    // Los roles son dinámicos: se busca el id del rol cuyo identificador de app coincide.
+    const { data: rolesData, error: rolesError } = await (supabase as any)
+      .from("roles")
+      .select("id, nombre, es_superadmin");
+    if (rolesError) throw new Error(rolesError.message);
+
+    const targetRole = ((rolesData ?? []) as any[]).find(
+      (r) => resolveAppRole(r) === role || r.nombre?.toLowerCase() === role.toLowerCase()
+    );
+    if (!targetRole) throw new Error("El rol seleccionado no existe en la base de datos.");
+
     const { error } = await supabase
       .from("perfiles")
       .update({
-        rol: role as any,
+        rol_id: targetRole.id,
         updated_at: new Date().toISOString(),
-      })
+      } as any)
       .eq("id", userId);
 
     if (error) throw new Error(error.message);

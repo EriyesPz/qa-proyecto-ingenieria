@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getBrigadasAction as getBrigadas } from "@/app/administracion/brigadas/actions";
 import { getMedicamentosAction as getMedicamentos } from "@/app/administracion/inventario/actions";
 import { supabase } from "@/lib/supabase";
+import { resolveAppRole } from "@/lib/auth/roles";
 import { createExpedienteCompletoAction as createExpedienteCompleto } from "../actions";
 import styles from "@/styles/pages/admin.module.css";
 
@@ -89,7 +90,7 @@ export function NuevoExpedienteClient() {
           getMedicamentos(),
           supabase
             .from("perfiles")
-            .select("*, especialidades:especialidad_id(id, nombre)")
+            .select("*, especialidades:especialidad_id(id, nombre), roles:rol_id(nombre, es_superadmin)")
             .order("nombre_completo", { ascending: true }),
         ]);
         if (mounted) {
@@ -103,7 +104,7 @@ export function NuevoExpedienteClient() {
           const activeMedicos = allProfiles.filter((v: any) => {
             if (v.activo === false) return false;
 
-            const rol = (v.rol || "").toLowerCase();
+            const rol = resolveAppRole(v.roles || v.rol);
             const cargo = (v.cargo || "").toLowerCase();
             const espNombre = (v.especialidades?.nombre || "").toLowerCase();
             const nombre = (v.nombre_completo || "").toLowerCase();
