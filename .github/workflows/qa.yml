@@ -1,0 +1,120 @@
+name: QA
+
+# Medición de calidad: análisis estático, compilación y seguridad.
+# Primera etapa ("primero se mide"): ningún hallazgo hace fallar la corrida;
+# cada paso de análisis registra su resultado y los reportes se suben como artefacto.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    name: Análisis estático, build y seguridad
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: Preparar carpeta de reportes
+        run: mkdir -p qa-reports
+
+      # Complejidad ciclomática: regla "complexity" con umbral 10 (McCabe), como advertencia.
+      - name: ESLint (texto)
+        id: eslint_txt
+        continue-on-error: true
+        run: |
+          npx eslint . --rule "complexity: [warn, 10]" --output-file qa-reports/eslint.txt
+
+      - name: ESLint (JSON)
+        id: eslint_json
+        continue-on-error: true
+        run: |
+          npx eslint . --rule "complexity: [warn, 10]" --format json --output-file qa-reports/eslint.json
+
+      - name: TypeScript (tsc --noEmit)
+        id: tsc
+        continue-on-error: true
+        run: npx tsc --noEmit | tee qa-reports/tsc.txt; exit "${PIPESTATUS[0]}"
+
+      - name: Compilación (npm run build)
+        id: build
+        continue-on-error: true
+        run: npm run build 2>&1 | tee qa-reports/build.txt; exit "${PIPESTATUS[0]}"
+
+      - name: npm audit (JSON)
+        id: audit
+        continue-on-error: true
+        run: npm audit --json > qa-reports/npm-audit.json
+
+      - name: Trivy fs (tabla)
+        id: trivy_table
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: table
+          output: qa-reports/trivy-fs.txt
+          skip-dirs: node_modules,.next,qa-reports,.git
+          exit-code: "0"
+
+      - name: Trivy fs (JSON)
+        id: trivy_json
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: json
+          output: qa-reports/trivy-fs.json
+          skip-dirs: node_modules,.next,qa-reports,.git
+          exit-code: "0"
+
+      - name: Resumen de resultados por paso
+        if: always()
+        run: |
+          {
+            echo "## Resultado de cada paso (sin bloquear la corrida)"
+            echo ""
+            echo "| Paso | Resultado |"
+            echo "|---|---|"
+            echo "| ESLint (texto) | ${{ steps.eslint_txt.outcome }} |"
+            echo "| ESLint (JSON) | ${{ steps.eslint_json.outcome }} |"
+            echo "| tsc --noEmit | ${{ steps.tsc.outcome }} |"
+            echo "| npm run build | ${{ steps.build.outcome }} |"
+            echo "| npm audit | ${{ steps.audit.outcome }} |"
+            echo "| Trivy (tabla) | ${{ steps.trivy_table.outcome }} |"
+            echo "| Trivy (JSON) | ${{ steps.trivy_json.outcome }} |"
+            echo ""
+            echo "Commit analizado: ${{ github.sha }}"
+          } | tee qa-reports/resumen.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Subir reportes como artefacto
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: qa-reports-${{ github.run_number }}
+          path: qa-reports/
+          if-no-files-found: warn
+          retention-days: 90
